@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neon Tetris</title>
+<style>
+*{box-sizing:border-box}
+:root{--bg:#0b0b12;--panel:#151522;--panel2:#1c1c2c;--line:#34344a;--text:#f5f5ff;--muted:#a5a5bd;--accent:#7c5cff}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 10%,#242044 0,transparent 35%),radial-gradient(circle at 85% 90%,#16283a 0,transparent 35%),var(--bg);color:var(--text);font-family:Arial,"Noto Sans KR",sans-serif;display:flex;justify-content:center;padding:24px}
+button,input{font:inherit}
+.app{width:min(100%,760px)}
+header{text-align:center;margin-bottom:14px}
+h1{margin:0;font-size:clamp(30px,6vw,48px);letter-spacing:5px}
+.subtitle{margin-top:7px;color:var(--muted);font-size:13px}
+
+.mode-select{display:flex;justify-content:center;gap:8px;margin:0 auto 16px}
+.mode-btn,.primary,.secondary,.key{border:1px solid var(--line);color:var(--text);background:var(--panel);cursor:pointer}
+.mode-btn{padding:9px 14px;border-radius:9px;font-size:13px}
+.mode-btn.active{background:var(--accent);border-color:var(--accent)}
+.mode-btn:disabled{opacity:.55;cursor:not-allowed}
+
+.game-layout{display:grid;grid-template-columns:160px 240px 160px;gap:14px;justify-content:center;align-items:start}
+.side{display:flex;flex-direction:column;gap:12px}
+.card{background:rgba(21,21,34,.94);border:1px solid var(--line);border-radius:14px;padding:13px;box-shadow:0 10px 35px rgba(0,0,0,.25)}
+.label{color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-bottom:7px}
+.value{font-size:23px;font-weight:700}.small{font-size:15px}
+.preview{width:100%;aspect-ratio:1;background:#08080d;border:1px solid #2e2e43;border-radius:10px}
+.board-wrap{position:relative;width:240px}
+#tetris{display:block;width:240px;height:400px;background:#050507;border:2px solid #ddd;border-radius:8px;box-shadow:0 0 35px rgba(124,92,255,.18)}
+.overlay{position:absolute;inset:0;background:rgba(5,5,10,.78);display:flex;align-items:center;justify-content:center;border-radius:8px}
+.overlay.hidden{display:none}
+.overlay-box{text-align:center;padding:20px}
+.overlay-box h2{margin:0 0 8px;font-size:27px}
+.overlay-box p{color:var(--muted);font-size:12px;margin:0 0 15px}
+.primary{padding:10px 25px;border-radius:9px;background:var(--accent);border-color:var(--accent);font-weight:700}
+.secondary{padding:10px;border-radius:9px}
+.controls{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px}
+.key{padding:8px 10px;border-radius:8px;font-size:12px}
+.key.wide{width:100%}
+.settings{margin-top:14px}
+.setting-row{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px}
+input[type=range]{flex:1;accent-color:var(--accent)}
+.help{margin-top:12px;text-align:center;color:var(--muted);font-size:12px;line-height:1.7}
+@media(max-width:650px){body{padding:14px}.game-layout{grid-template-columns:1fr 240px 1fr;gap:7px}.card{padding:9px}.value{font-size:17px}.preview{width:100%}}
+@media(max-width:520px){.game-layout{grid-template-columns:1fr 210px 1fr}.board-wrap,#tetris{width:210px}#tetris{height:350px}.card{border-radius:10px}.label{font-size:9px}}
+@media(max-width:420px){.game-layout{grid-template-columns:1fr}.board-wrap{margin:auto}.side{display:grid;grid-template-columns:1fr 1fr}.side .card:nth-child(3){grid-column:span 2}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<h1>NEON TETRIS</h1>
+<div class="subtitle" id="subtitle">30줄을 제거하면 게임 클리어!</div>
+</header>
+
+<div class="mode-select">
+<button class="mode-btn active" data-mode="30">30줄 챌린지</button>
+<button class="mode-btn" data-mode="infinite">무한 모드</button>
+</div>
+
+<div class="game-layout">
+<div class="side">
+<div class="card"><div class="label">Score</div><div class="value" id="score">0</div></div>
+<div class="card"><div class="label">Lines</div><div class="value" id="lines">0 / 30</div></div>
+<div class="card"><div class="label">Time</div><div class="value small" id="time">00:00</div></div>
+</div>
+
+<div class="board-wrap">
+<canvas id="tetris" width="240" height="400"></canvas>
+<div id="overlay" class="overlay">
+<div class="overlay-box">
+<h2 id="overlayTitle">READY?</h2>
+<p id="overlayText">START를 눌러 게임을 시작하세요.</p>
+<button class="primary" id="startBtn" type="button">START</button>
+</div>
+</div>
+<div class="controls">
+<button class="key" data-action="left" type="button">←</button>
+<button class="key" data-action="down" type="button">↓</button>
+<button class="key" data-action="right" type="button">→</button>
+<button class="key" data-action="rotateCCW" type="button">↶</button>
+<button class="key" data-action="rotateCW" type="button">↷</button>
+<button class="key" data-action="hold" type="button">HOLD</button>
+<button class="key wide" data-action="hard" type="button">SPACE / HARD DROP</button>
+</div>
+</div>
+
+<div class="side">
+<div class="card"><div class="label">Next</div><canvas id="next" class="preview" width="100" height="100"></canvas></div>
+<div class="card"><div class="label">Hold</div><canvas id="hold" class="preview" width="100" height="100"></canvas></div>
+<button class="secondary" id="resetBtn" type="button">RESET</button>
+</div>
+</div>
+
+<div class="settings">
+<div class="setting-row"><span>낙하 속도</span><input id="speed" type="range" min="300" max="1500" step="50" value="1000"><span id="speedText">1.0초</span></div>
+</div>
+<div class="help">← → 이동 · ↓ 소프트 드롭 · Space 하드 드롭 · W 시계 방향 · Ctrl 반시계 방향 · Shift 홀드</div>
+</div>
+
+<script>
+"use strict";
+
+const canvas=document.getElementById("tetris"),ctx=canvas.getContext("2d");
+ctx.scale(20,20);
+const nextCanvas=document.getElementById("next"),nextCtx=nextCanvas.getContext("2d");nextCtx.scale(20,20);
+const holdCanvas=document.getElementById("hold"),holdCtx=holdCanvas.getContext("2d");holdCtx.scale(20,20);
+
+const scoreEl=document.getElementById("score"),linesEl=document.getElementById("lines"),timeEl=document.getElementById("time");
+const overlay=document.getElementById("overlay"),overlayTitle=document.getElementById("overlayTitle"),overlayText=document.getElementById("overlayText");
+const startBtn=document.getElementById("startBtn"),resetBtn=document.getElementById("resetBtn"),speed=document.getElementById("speed"),speedText=document.getElementById("speedText");
+const subtitle=document.getElementById("subtitle"),modeButtons=document.querySelectorAll(".mode-btn");
+
+const colors=[null,"#ff3d81","#27d9ff","#36f58a","#d94cff","#ff9d32","#ffe14a","#4d7cff"];
+const arena=Array.from({length:20},()=>Array(12).fill(0));
+const player={pos:{x:0,y:0},matrix:null,score:0,lines:0,next:null,held:null,hasHeld:false};
+
+let running=false,gameMode="30",dropCounter=0,dropInterval=1000,lastTime=0,startTime=0,elapsedBeforePause=0;
+
+function createPiece(type){
+ const pieces={
+ T:[[0,0,0],[1,1,1],[0,1,0]],
+ O:[[2,2],[2,2]],
+ L:[[0,3,0],[0,3,0],[0,3,3]],
+ J:[[0,4,0],[0,4,0],[4,4,0]],
+ I:[[0,5,0,0],[0,5,0,0],[0,5,0,0],[0,5,0,0]],
+ S:[[0,6,6],[6,6,0],[0,0,0]],
+ Z:[[7,7,0],[0,7,7],[0,0,0]]
+ };
+ return pieces[type];
+}
+function randomPiece(){return createPiece(["T","O","L","J","I","S","Z"][Math.floor(Math.random()*7)])}
+function collide(arena,player){
+ const m=player.matrix,p=player.pos;
+ for(let y=0;y<m.length;y++)for(let x=0;x<m[y].length;x++){
+  if(m[y][x]!==0 && (arena[y+p.y]===undefined || arena[y+p.y][x+p.x]!==0)) return true;
+ }
+ return false;
+}
+function merge(){player.matrix.forEach((row,y)=>row.forEach((v,x)=>{if(v)arena[y+player.pos.y][x+player.pos.x]=v}))}
+function sweep(){
+ let rowCount=1;
+ outer:for(let y=arena.length-1;y>=0;y--){
+  for(let x=0;x<arena[y].length;x++)if(arena[y][x]===0)continue outer;
+  arena.splice(y,1);arena.unshift(Array(12).fill(0));y++;
+  player.score+=rowCount*10;player.lines++;rowCount*=2;
+ }
+}
+function playerReset(){
+ player.matrix=player.next||randomPiece();player.next=randomPiece();
+ player.pos.y=0;player.pos.x=Math.floor((arena[0].length-player.matrix[0].length)/2);
+ drawNext();
+ if(collide(arena,player)) endGame("GAME OVER","블록이 더 이상 내려갈 공간이 없습니다.");
+}
+function playerDrop(){
+ if(!running)return;
+ player.pos.y++;
+ if(collide(arena,player)){
+  player.pos.y--;merge();sweep();playerReset();updateScore();
+  if(gameMode==="30"&&player.lines>=30){endGame("CLEAR!","30줄을 모두 제거했습니다! 🎉");}
+ }
+ dropCounter=0;
+}
+function playerMove(dir){
+ if(!running)return;
+ player.pos.x+=dir;
+ if(collide(arena,player))player.pos.x-=dir;
+}
+function rotate(matrix,dir){
+ for(let y=0;y<matrix.length;y++)for(let x=0;x<y;x++) [matrix[x][y],matrix[y][x]]=[matrix[y][x],matrix[x][y]];
+ if(dir>0)matrix.forEach(row=>row.reverse());else matrix.reverse();
+}
+function playerRotate(dir){
+ if(!running)return;
+ const oldX=player.pos.x,oldMatrix=player.matrix.map(r=>r.slice());
+ rotate(player.matrix,dir);
+ let offset=1;
+ while(collide(arena,player)){
+  player.pos.x+=offset;
+  offset=-(offset+(offset>0?1:-1));
+  if(offset>player.matrix[0].length){player.matrix=oldMatrix;player.pos.x=oldX;break}
+ }
+}
+function playerHardDrop(){
+ if(!running)return;
+ let distance=0;
+ while(!collide(arena,player)){player.pos.y++;distance++}
+ player.pos.y--;player.score+=Math.max(0,distance-1)*2;merge();sweep();playerReset();updateScore();
+ if(gameMode==="30"&&player.lines>=30)endGame("CLEAR!","30줄을 모두 제거했습니다! 🎉");
+ dropCounter=0;
+}
+function playerHold(){
+ if(!running||player.hasHeld)return;
+ if(player.held===null){player.held=player.matrix;player.hasHeld=true;playerReset()}
+ else{const temp=player.held;player.held=player.matrix;player.matrix=temp;player.pos.y=0;player.pos.x=Math.floor((arena[0].length-player.matrix[0].length)/2);player.hasHeld=true;if(collide(arena,player))endGame("GAME OVER","HOLD 후 블록을 놓을 수 없습니다.")}
+ drawHold();
+}
+
+function drawMatrix(matrix,offset,context=ctx){
+ matrix.forEach((row,y)=>row.forEach((v,x)=>{if(v){context.fillStyle=colors[v];context.fillRect(x+offset.x,y+offset.y,1,1);}}));
+}
+function draw(){
+ ctx.fillStyle="#050507";ctx.fillRect(0,0,12,20);
+ drawMatrix(arena,{x:0,y:0});
+ if(player.matrix){
+  const ghost={pos:{x:player.pos.x,y:player.pos.y},matrix:player.matrix};
+  while(!collide(arena,ghost))ghost.pos.y++;
+  ghost.pos.y--;
+  ctx.globalAlpha=.16;drawMatrix(ghost.matrix,ghost.pos);ctx.globalAlpha=1;
+  drawMatrix(player.matrix,player.pos);
+ }
+}
+function drawNext(){
+ nextCtx.fillStyle="#08080d";nextCtx.fillRect(0,0,5,5);
+ if(player.next){const w=player.next[0].length,h=player.next.length;drawMatrix(player.next,{x:(5-w)/2,y:(5-h)/2},nextCtx)}
+}
+function drawHold(){
+ holdCtx.fillStyle="#08080d";holdCtx.fillRect(0,0,5,5);
+ if(player.held){const w=player.held[0].length,h=player.held.length;drawMatrix(player.held,{x:(5-w)/2,y:(5-h)/2},holdCtx)}
+}
+function updateScore(){
+ scoreEl.textContent=player.score.toLocaleString();
+ linesEl.textContent=gameMode==="30"?`${player.lines} / 30`:String(player.lines);
+}
+function formatTime(ms){const total=Math.floor(ms/1000);return String(Math.floor(total/60)).padStart(2,"0")+":"+String(total%60).padStart(2,"0")}
+function updateTime(now){if(running)timeEl.textContent=formatTime(now-startTime+elapsedBeforePause)}
+function showOverlay(title,text,buttonText="START"){overlayTitle.textContent=title;overlayText.textContent=text;startBtn.textContent=buttonText;overlay.classList.remove("hidden")}
+function hideOverlay(){overlay.classList.add("hidden")}
+
+function startGame(){
+ for(const row of arena)row.fill(0);
+ player.score=0;player.lines=0;player.held=null;player.hasHeld=false;player.next=randomPiece();
+ dropCounter=0;dropInterval=Number(speed.value);elapsedBeforePause=0;startTime=performance.now();running=true;
+ playerReset();drawHold();updateScore();timeEl.textContent="00:00";hideOverlay();
+}
+function endGame(title,text){running=false;showOverlay(title,text,"RESTART")}
+function resetGame(){running=false;startGame()}
+
+function update(time=0){
+ const delta=time-lastTime;lastTime=time;
+ if(running){dropCounter+=delta;if(dropCounter>dropInterval)playerDrop();updateTime(time)}
+ draw();requestAnimationFrame(update);
+}
+
+modeButtons.forEach(btn=>btn.addEventListener("click",()=>{
+ if(running)return;
+ gameMode=btn.dataset.mode;
+ modeButtons.forEach(b=>b.classList.toggle("active",b===btn));
+ subtitle.textContent=gameMode==="30"?"30줄을 제거하면 게임 클리어!":"제한 없이 계속 플레이하세요!";
+ updateScore();
+}));
+
+speed.addEventListener("input",()=>{dropInterval=Number(speed.value);speedText.textContent=(Number(speed.value)/1000).toFixed(1)+"초"});
+startBtn.addEventListener("click",startGame);
+resetBtn.addEventListener("click",startGame);
+
+document.querySelectorAll(".key").forEach(btn=>btn.addEventListener("click",()=>action(btn.dataset.action)));
+function action(name){
+ if(name==="left")playerMove(-1);
+ if(name==="right")playerMove(1);
+ if(name==="down")playerDrop();
+ if(name==="hard")playerHardDrop();
+ if(name==="rotateCW")playerRotate(1);
+ if(name==="rotateCCW")playerRotate(-1);
+ if(name==="hold")playerHold();
+}
+document.addEventListener("keydown",e=>{
+ if(["ArrowLeft","ArrowRight","ArrowDown"," ","Shift","Control"].includes(e.key))e.preventDefault();
+ if(e.key==="ArrowLeft")action("left");
+ else if(e.key==="ArrowRight")action("right");
+ else if(e.key==="ArrowDown")action("down");
+ else if(e.key===" ")action("hard");
+ else if(e.key==="Shift")action("hold");
+ else if(e.key.toLowerCase()==="w"&&!e.ctrlKey)action("rotateCW");
+ else if(e.key==="Control")action("rotateCCW");
+});
+
+updateScore();drawNext();drawHold();requestAnimationFrame(update);
+</script>
+</body>
+</html>
